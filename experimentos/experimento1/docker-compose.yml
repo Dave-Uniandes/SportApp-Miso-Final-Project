@@ -1,0 +1,129 @@
+version: '3'
+
+services:
+  traefik:
+    image: "traefik:latest"
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "8105:443"
+    networks:
+      - app_net
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  user-microservice:
+    build:
+      context: users-service/.
+      dockerfile: Dockerfile
+    deploy:
+      mode: replicated
+      replicas: 3
+      placement:
+        constraints:
+          - node.role == manager
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users-app.entrypoints=websecure"
+      - "traefik.http.routers.users-app.rule=(PathPrefix(`/users`))"
+      - "traefik.http.routers.users-app.middlewares=users-stripprefix"
+      - "traefik.http.middlewares.users-stripprefix.stripprefix.prefixes=/users/"
+      - "traefik.http.services.users-app.loadbalancer.server.port=5000"
+    networks:
+      - app_net
+      - users_net
+  
+  trainer-microservice:
+    build:
+      context: trainer-service/.
+      dockerfile: Dockerfile
+    deploy:
+      mode: replicated
+      replicas: 2
+      placement:
+        constraints:
+          - node.role == manager
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.trainer-app.entrypoints=websecure"
+      - "traefik.http.routers.trainer-app.rule=(PathPrefix(`/trainer`))"
+      - "traefik.http.routers.trainer-app.middlewares=trainer-stripprefix"
+      - "traefik.http.middlewares.trainer-stripprefix.stripprefix.prefixes=/trainer/"
+      - "traefik.http.services.trainer-app.loadbalancer.server.port=5000"
+    networks:
+      - app_net
+      - trainer_net
+
+  plan-microservice:
+    build:
+      context: plans-service/.
+      dockerfile: Dockerfile
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.plans-app.entrypoints=websecure"
+      - "traefik.http.routers.plans-app.rule=(PathPrefix(`/plans`))"
+      - "traefik.http.routers.plans-app.middlewares=plans-stripprefix"
+      - "traefik.http.middlewares.plans-stripprefix.stripprefix.prefixes=/plans/" 
+      - "traefik.http.services.plans-app.loadbalancer.server.port=5000"
+    networks:
+      - plans_net
+
+  plans_database:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: PLANS_DB
+      POSTGRES_USER: USER_PLANS_DB
+      POSTGRES_PASSWORD: PLANS_PASSWORD_ULTA_SECRETO
+    networks:
+      - app_net
+      - plans_net
+
+  trainer_database:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: TRAINER_DB
+      POSTGRES_USER: USER_TRAINER_DB
+      POSTGRES_PASSWORD: TRAINER_PASSWORD_ULTA_SECRETO
+    networks:
+      - trainer_net
+  
+  users_database:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: USER_DB
+      POSTGRES_USER: USER_USER_DB
+      POSTGRES_PASSWORD: USER_PASSWORD_ULTA_SECRETO
+    networks:
+      - users_net
+
+networks:
+  app_net:
+    driver: bridge
+  plans_net:
+    driver: bridge
+  trainer_net:
+    driver: bridge
+  users_net:
+    driver: bridge
