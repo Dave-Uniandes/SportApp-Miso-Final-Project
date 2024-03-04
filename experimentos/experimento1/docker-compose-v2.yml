@@ -28,13 +28,40 @@ services:
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
 
+  traefik2:
+    image: "traefik:latest"
+    command:
+      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+    ports:
+      - "8106:443"
+    networks:
+      - app2_net
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        parallelism: 2
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
   user-microservice:
     build:
       context: users-service/.
       dockerfile: Dockerfile
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 3
       placement:
         constraints:
           - node.role == manager
@@ -55,7 +82,7 @@ services:
       dockerfile: Dockerfile
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 3
       placement:
         constraints:
           - node.role == manager
@@ -76,7 +103,7 @@ services:
       dockerfile: Dockerfile
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 3
       placement:
         constraints:
           - node.role == manager
@@ -121,6 +148,8 @@ services:
 
 networks:
   app_net:
+    driver: bridge
+  app2_net:
     driver: bridge
   plans_net:
     driver: bridge
